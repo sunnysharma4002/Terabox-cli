@@ -135,34 +135,47 @@ def process_terabox_link(terabox_url):
     }
 
 
-def app(request):
-    if request.method == 'OPTIONS':
-        return {
-            'statusCode': 200,
-            'headers': {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type'}
-        }
+def parse_query_string(query_string):
+    if not query_string:
+        return {}
+    params = {}
+    for pair in query_string.split('&'):
+        if '=' in pair:
+            key, value = pair.split('=', 1)
+            params[urllib.parse.unquote_plus(key)] = urllib.parse.unquote_plus(value)
+        else:
+            params[urllib.parse.unquote_plus(pair)] = ''
+    return params
 
-    if request.method != 'GET':
-        return {
-            'statusCode': 405,
-            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-            'body': json.dumps({'error': 'Method not allowed'})
-        }
 
-    url = request.args.get('url') if hasattr(request, 'args') else request.query_string
+def app(environ, start_response):
+    method = environ.get('REQUEST_METHOD', 'GET')
+    path = environ.get('PATH_INFO', '/')
+
+    headers = [
+        ('Content-Type', 'application/json'),
+        ('Access-Control-Allow-Origin', '*'),
+        ('Access-Control-Allow-Methods', 'GET, OPTIONS'),
+        ('Access-Control-Allow-Headers', 'Content-Type')
+    ]
+
+    if method == 'OPTIONS':
+        start_response('200 OK', headers)
+        return [b'{}']
+
+    if method != 'GET':
+        start_response('405 Method Not Allowed', headers)
+        return [json.dumps({'error': 'Method not allowed'}).encode()]
+
+    query_string = environ.get('QUERY_STRING', '')
+    params = parse_query_string(query_string)
+    url = params.get('url', '')
 
     if not url:
-        return {
-            'statusCode': 400,
-            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-            'body': json.dumps({'error': 'Missing "url" query parameter'})
-        }
+        start_response('400 Bad Request', headers)
+        return [json.dumps({'error': 'Missing "url" query parameter. Example: /?url=https://terabox.com/s/abc123'}).encode()]
 
     result = process_terabox_link(url)
-    status = 200 if 'error' not in result else 400
-
-    return {
-        'statusCode': status,
-        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-        'body': json.dumps(result, indent=2)
-    }
+    status = '200 OK' if 'error' not in result else '400 Bad Request'
+    start_response(status, headers)
+    return [json.dumps(result, indent=2).encode()]

@@ -3,10 +3,7 @@
   "builds": [
     {
       "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "entrypoint": "app"
-      }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
